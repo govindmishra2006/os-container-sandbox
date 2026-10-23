@@ -1,5 +1,7 @@
 # os-container-sandbox
 
+[![CI](https://github.com/govindmishra2006/os-container-sandbox/actions/workflows/ci.yml/badge.svg)](https://github.com/govindmishra2006/os-container-sandbox/actions/workflows/ci.yml)
+
 **Lightweight OS-Level Virtualization & Protection Engine** — a Python library and CLI that builds the core pieces of a container runtime from first principles: kernel namespaces, a dual-mode CPU model, a journaling block file system, an access-matrix protection engine, DoS-resistant resource limits, and a disk I/O scheduler.
 
 It runs **real Linux namespaces** (`unshare` + `fork` + `chroot`) when started as root on Linux, and falls back to a **portable user-space simulation** everywhere else (macOS, unprivileged Linux). It has no runtime dependencies beyond the Python standard library.
