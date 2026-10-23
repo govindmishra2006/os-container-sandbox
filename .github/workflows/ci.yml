@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: pytest (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.9", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e ".[dev]"
+      - run: pytest -v
+
+  namespaces:
+    # Runs the suite as root so the real PID/UTS/mount namespace test executes.
+    name: pytest as root (real Linux namespaces)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: sudo -E env "PATH=$PATH" python -m pytest -v -rs
+      - name: Namespace smoke test
+        run: sudo -E env "PATH=$PATH" sandbox run --hostname ci-guest -- sh -c 'test "$(hostname)" = ci-guest && test $$ -eq 1 && echo isolated'

@@ -101,6 +101,9 @@ flowchart TB
 ```
 os-container-sandbox/
 ├── pyproject.toml
+├── Dockerfile              # Linux image for real namespace mode
+├── .github/workflows/ci.yml
+├── LICENSE
 ├── README.md
 ├── src/container_sandbox/
 │   ├── virtualization.py   # Module A: namespaces, dual mode, HA monitor
@@ -132,11 +135,12 @@ Without installing, you can run it from the source tree:
 PYTHONPATH=src python3 -m container_sandbox demo
 ```
 
-To try real namespaces from macOS or Windows, use a privileged Linux container:
+To try real namespaces from macOS or Windows, use the bundled Dockerfile (namespaces need `--privileged`):
 
 ```bash
-docker run --rm -it --privileged -v "$PWD":/app -w /app python:3.12-slim \
-  sh -c 'pip install -q -e . && sandbox run --hostname guest -- /bin/sh'
+docker build -t os-sandbox .
+docker run --rm -it --privileged os-sandbox sandbox shell --hostname guest
+docker run --rm --privileged os-sandbox pytest -rs        # includes the real-namespace test
 ```
 
 ---
@@ -239,7 +243,9 @@ pytest            # or: python3 -m pytest -v
 | `test_disk_scheduler.py` | textbook totals (FCFS 640, SSTF 236, SCAN↓ 236, C-SCAN 382, LOOK, C-LOOK), edge cases, container queue to cylinder mapping |
 | `test_cli.py` | end-to-end CLI flows with persisted state, plus the full demo |
 
-Current results: **104 passed / 2 skipped on macOS** (the skipped tests are Linux-only), and **105 passed / 1 skipped on Linux as root** in `python:3.12-slim --privileged` (the skipped test checks the behaviour when root is missing).
+CI (GitHub Actions) runs the suite on Ubuntu and macOS for Python 3.9, 3.11, 3.12 and 3.13. A separate job runs it **as root on Linux**, so the real-namespace test executes, and then runs a namespace smoke test.
+
+Current results: **104 passed / 2 skipped on macOS** (Python 3.9, 3.13 and 3.14) (the skipped tests are Linux-only), and **105 passed / 1 skipped on Linux as root** in `python:3.12-slim --privileged` (the skipped test checks the behaviour when root is missing).
 
 ---
 
@@ -351,4 +357,4 @@ SSTF is often the cheapest but unfair. SCAN and C-SCAN suit heavily loaded disks
 - The file system, access matrix and capability state persist as JSON, written with atomic rename, under `--state-dir`.
 
 ## License
-MIT
+[MIT](LICENSE)

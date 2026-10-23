@@ -1,0 +1,5 @@
+.git
+.venv
+.sandbox_state
+**/__pycache__
+.pytest_cache
