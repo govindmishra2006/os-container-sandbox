@@ -114,8 +114,10 @@ os-container-sandbox/
 │   ├── security.py         # Module D: rlimits/cgroups, threat detection
 │   ├── disk_scheduler.py   # Module E: six disk-scheduling algorithms
 │   ├── cli.py              # argparse CLI + guided demo
+│   ├── web.py              # `sandbox web` dashboard server + JSON API
+│   ├── assets/dashboard.html
 │   └── __main__.py         # python -m container_sandbox
-└── tests/                  # 106 pytest tests, one file per module + CLI
+└── tests/                  # 117 pytest tests, one file per module + CLI + web
 ```
 
 ---
@@ -155,6 +157,17 @@ docker run --rm --privileged os-sandbox pytest -rs        # includes the real-na
 ```bash
 sandbox demo
 ```
+
+### Browser dashboard
+```bash
+sandbox web --open          # http://localhost:8000
+```
+A local web page that demonstrates every subsystem live. It uses only the standard library and binds to 127.0.0.1:
+- **Disk scheduling:** an animated head-movement trace for each algorithm, with a comparison of total travel.
+- **Virtual disk:** the bit table as a block grid, file creation with each allocation method, and crash-then-recover from the journal.
+- **Protection:** the access matrix, access checks, domain switching, copying starred rights, ACL revocation, and capability re-keying.
+- **Containers:** a guest that crashes and is restarted by the heartbeat monitor, and the user/supervisor trap.
+- **Threats:** all five violation categories, plus a live CPU-limit kill.
 
 ### Containers
 ```bash
@@ -244,10 +257,11 @@ pytest            # or: python3 -m pytest -v
 | `test_security.py` | token-bucket DoS throttling, classification of all five threat categories, PBKDF2 masquerade detection, live `RLIMIT_CPU` / `RLIMIT_FSIZE` enforcement, `RLIMIT_AS` (Linux) |
 | `test_disk_scheduler.py` | textbook totals (FCFS 640, SSTF 236, SCAN↓ 236, C-SCAN 382, LOOK, C-LOOK), edge cases, container queue to cylinder mapping |
 | `test_cli.py` | end-to-end CLI flows with persisted state, plus the full demo |
+| `test_web.py` | every dashboard API endpoint over real HTTP, including error responses |
 
 CI (GitHub Actions) runs the suite on Ubuntu and macOS for Python 3.9, 3.11, 3.12 and 3.13. A separate job runs it **as root on Linux**, so the real-namespace test executes, and then runs a namespace smoke test.
 
-Current results: **104 passed / 2 skipped on macOS** (Python 3.9, 3.13 and 3.14) (the skipped tests are Linux-only), and **105 passed / 1 skipped on Linux as root** in `python:3.12-slim --privileged` (the skipped test checks the behaviour when root is missing).
+Current results: **115 passed / 2 skipped on macOS** (Python 3.9, 3.13 and 3.14) (the skipped tests are Linux-only), and **116 passed / 1 skipped on Linux as root** in `python:3.12-slim --privileged` (the skipped test checks the behaviour when root is missing).
 
 ---
 

@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OS Sandbox Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --fog: #EEF1F4;
+  --paper: #F8FAFB;
+  --ink: #1D2733;
+  --muted: #5B6B7C;
+  --line: #CBD3DC;
+  --cobalt: #2F5D8A;
+  --cobalt-soft: #D6E2EE;
+  --amber: #B7791F;
+  --amber-soft: #F3E3C4;
+  --alarm: #B23A48;
+  --alarm-soft: #F4D9DD;
+  --go: #2E7D5B;
+  --go-soft: #D5EBE0;
+  --sans: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fog: #151C24; --paper: #1C252F; --ink: #E3E9EF; --muted: #94A3B3; --line: #33414F;
+    --cobalt: #7FA8D1; --cobalt-soft: #263A50; --amber: #E0A94B; --amber-soft: #43361F;
+    --alarm: #E27A86; --alarm-soft: #4A2730; --go: #6CC49B; --go-soft: #1F3D30;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0; background: var(--fog); color: var(--ink);
+  font: 400 15px/1.55 var(--sans); font-variation-settings: "wdth" 100;
+}
+a { color: inherit; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--cobalt); outline-offset: 2px; }
+
+.shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 100vh; }
+nav.side {
+  position: sticky; top: 0; height: 100vh; padding: 28px 22px;
+  border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 28px;
+}
+.brand { font-weight: 800; font-variation-settings: "wdth" 112; font-size: 19px; line-height: 1.15; letter-spacing: -0.01em; }
+.brand small { display: block; font-weight: 400; font-size: 13px; color: var(--muted); letter-spacing: 0; margin-top: 6px; font-variation-settings: "wdth" 100; }
+nav.side ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+nav.side a {
+  display: block; text-decoration: none; padding: 7px 10px; border-radius: 6px; color: var(--muted);
+}
+nav.side a:hover, nav.side a.on { color: var(--ink); background: var(--paper); }
+.host { font-size: 13px; color: var(--muted); margin-top: auto; }
+.host b { color: var(--ink); font-weight: 600; }
+
+main { padding: 36px 44px 80px; max-width: 1180px; }
+section { padding: 8px 0 48px; border-bottom: 1px solid var(--line); margin-bottom: 40px; scroll-margin-top: 20px; }
+section:last-child { border-bottom: 0; }
+h1, h2 { font-variation-settings: "wdth" 118; letter-spacing: -0.02em; margin: 0; }
+h1 { font-size: clamp(30px, 4.2vw, 50px); line-height: 1.02; font-weight: 800; max-width: 16ch; }
+h2 { font-size: 28px; line-height: 1.1; font-weight: 750; }
+h3 { font-size: 15px; font-weight: 650; margin: 0 0 10px; }
+.lede { color: var(--muted); max-width: 64ch; margin: 12px 0 24px; }
+
+.panel { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+.cols { display: grid; gap: 20px; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); align-items: start; }
+.stack { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
+.cols > * { min-width: 0; }
+
+form.row, .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+label.f { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+input, select {
+  background: var(--fog); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; min-width: 0;
+}
+input.wide { width: min(360px, 100%); }
+input.num { width: 84px; }
+button {
+  border: 1px solid var(--ink); background: var(--ink); color: var(--paper);
+  border-radius: 6px; padding: 7px 14px; cursor: pointer; font-weight: 600;
+}
+button.quiet { background: transparent; color: var(--ink); border-color: var(--line); font-weight: 500; }
+button.danger { background: var(--alarm); border-color: var(--alarm); color: #fff; }
+button:hover { filter: brightness(1.08); }
+button:disabled { opacity: .55; cursor: progress; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: transparent; color: var(--muted); font-weight: 500; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+
+/* --- disk scheduler (the centrepiece) --- */
+.algos { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 22px 0 14px; }
+.algo {
+  text-align: left; background: transparent; color: var(--ink); border: 1px solid var(--line);
+  padding: 10px 12px 12px; border-radius: 8px; font-weight: 500; display: grid; gap: 6px;
+}
+.algo .name { font-weight: 700; font-variation-settings: "wdth" 110; }
+.algo .total { font-size: 26px; font-weight: 750; font-variation-settings: "wdth" 85; line-height: 1; }
+.algo .unit { font-size: 12px; color: var(--muted); }
+.algo .bar { height: 4px; background: var(--cobalt-soft); border-radius: 2px; overflow: hidden; }
+.algo .bar i { display: block; height: 100%; background: var(--cobalt); }
+.algo[aria-pressed="true"] { border-color: var(--ink); background: var(--paper); box-shadow: inset 0 0 0 1px var(--ink); }
+.algo .best { font-size: 12px; color: var(--go); font-weight: 600; min-height: 1.2em; }
+.trace-wrap { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px 10px; }
+.trace-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
+.trace-head strong { color: var(--ink); }
+svg.trace { width: 100%; height: auto; display: block; margin-top: 8px; overflow: visible; }
+svg.trace .axis { stroke: var(--line); }
+svg.trace .tick { fill: var(--muted); font: 11px var(--sans); }
+svg.trace .req { fill: var(--paper); stroke: var(--cobalt); stroke-width: 1.5; }
+svg.trace .path { fill: none; stroke: var(--cobalt); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+svg.trace .jump { fill: none; stroke: var(--amber); stroke-width: 2; stroke-dasharray: 5 5; }
+svg.trace .start { fill: var(--ink); }
+svg.trace .stop-label { fill: var(--ink); font: 600 11px var(--sans); }
+.sequence { font-size: 13px; color: var(--muted); margin: 6px 0 4px; overflow-wrap: anywhere; }
+
+/* --- virtual disk --- */
+.blocks { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 4px; }
+.blk {
+  aspect-ratio: 1; border-radius: 3px; border: 1px solid var(--line); background: transparent;
+  font: 10px var(--mono); color: var(--muted); display: grid; place-items: center; padding: 0;
+  transition: transform .15s;
+}
+.blk.used { background: var(--cobalt); border-color: var(--cobalt); color: var(--paper); }
+.blk.index { background: var(--amber-soft); border: 2px solid var(--amber); color: var(--ink); }
+.blk.journal { background: var(--amber); border-color: var(--amber); color: #fff; }
+.blk.hl { transform: scale(1.18); box-shadow: 0 0 0 2px var(--ink); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); margin-top: 12px; }
+.legend span::before { content: ""; display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; border: 1px solid var(--line); }
+.legend .l-used::before { background: var(--cobalt); border-color: var(--cobalt); }
+.legend .l-index::before { background: var(--amber-soft); border: 2px solid var(--amber); }
+.legend .l-journal::before { background: var(--amber); border-color: var(--amber); }
+.bits { font: 12px/1.6 var(--mono); color: var(--muted); overflow-wrap: anywhere; margin: 12px 0 0; }
+.bits b { color: var(--cobalt); font-weight: 600; }
+.stats { display: flex; gap: 22px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 10px; }
+.stats b { display: block; font-size: 20px; color: var(--ink); font-weight: 700; font-variation-settings: "wdth" 90; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+.scroll { overflow-x: auto; }
+td.mono, .mono { font-family: var(--mono); font-size: 12px; }
+.files tr { cursor: default; }
+.files tr:hover td { background: var(--fog); }
+.journal { font: 12px/1.7 var(--mono); max-height: 260px; overflow: auto; margin: 0; padding: 0; list-style: none; }
+.journal li { display: grid; grid-template-columns: 2.2em 5.6em 4.6em minmax(0, 1fr); gap: 6px; padding: 1px 4px; border-radius: 3px; }
+.journal li.bad { background: var(--alarm-soft); color: var(--alarm); }
+.journal li.cp { color: var(--muted); }
+
+/* --- protection --- */
+.matrix td, .matrix th { text-align: center; white-space: nowrap; }
+.matrix th:first-child, .matrix td:first-child { text-align: left; font-weight: 650; color: var(--ink); }
+.matrix td.empty { color: var(--line); }
+.chip { display: inline-block; padding: 1px 6px; border-radius: 4px; background: var(--cobalt-soft); margin: 1px; font-size: 12px; }
+.chip.sp { background: var(--amber-soft); }
+.chip.dead { background: transparent; color: var(--muted); text-decoration: line-through; border: 1px dashed var(--line); }
+.result { margin-top: 12px; padding: 9px 12px; border-radius: 6px; font-size: 14px; border-left: 3px solid; }
+.result.ok { background: var(--go-soft); border-color: var(--go); }
+.result.no { background: var(--alarm-soft); border-color: var(--alarm); }
+.result:empty { display: none; }
+#protect .cols { grid-template-columns: minmax(0, 1fr); }
+.actions { display: grid; gap: 22px 28px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start; }
+.actions .result, .actions .audit-box { grid-column: 1 / -1; }
+.audit { font: 12px/1.7 var(--mono); color: var(--muted); max-height: 160px; overflow: auto; margin: 0; padding: 0; list-style: none; }
+.audit .deny { color: var(--alarm); }
+
+/* --- containers & threats --- */
+.timeline { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+.timeline li { display: grid; grid-template-columns: 72px 56px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.timeline li:last-child { border: 0; }
+.timeline time { color: var(--muted); font-size: 12px; font-family: var(--mono); padding-top: 2px; }
+.tag { font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 4px; justify-self: start; align-self: start; background: var(--cobalt-soft); }
+.tag.crash, .tag.gave-up, .tag.fault, .tag.critical, .tag.high { background: var(--alarm-soft); color: var(--alarm); }
+.tag.restart, .tag.supervisor, .tag.medium { background: var(--amber-soft); color: var(--ink); }
+.tag.start, .tag.user { background: var(--go-soft); color: var(--ink); }
+.cats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.cat { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--paper); }
+.cat b { font-size: 30px; line-height: 1; display: block; font-weight: 750; font-variation-settings: "wdth" 85; }
+.cat span { font-size: 13px; color: var(--muted); }
+.cat.hot b { color: var(--alarm); }
+.empty-note { color: var(--muted); font-size: 14px; margin: 0; }
+.err { color: var(--alarm); font-size: 14px; margin-top: 8px; min-height: 1.2em; }
+
+@media (max-width: 980px) {
+  .shell { grid-template-columns: 1fr; }
+  nav.side { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 16px; border-right: 0; border-bottom: 1px solid var(--line); gap: 12px 20px; }
+  nav.side ul { display: flex; flex-wrap: wrap; }
+  .host { margin-top: 0; }
+  main { padding: 24px 16px 60px; }
+  .cols { grid-template-columns: 1fr; }
+  .algos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 520px) {
+  .algos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .blocks { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="side" aria-label="Subsystems">
+    <div class="brand">os-container-sandbox<small>Live demo of an OS-level virtualization engine</small></div>
+    <ul>
+      <li><a href="#disk">Disk scheduling</a></li>
+      <li><a href="#fs">Virtual disk</a></li>
+      <li><a href="#protect">Protection</a></li>
+      <li><a href="#containers">Containers</a></li>
+      <li><a href="#threats">Threats</a></li>
+    </ul>
+    <div class="host" id="host">Checking host…</div>
+  </nav>
+
+  <main>
+    <!-- Disk scheduling -->
+    <section id="disk" aria-labelledby="disk-h">
+      <h1 id="disk-h">Where the disk head goes</h1>
+      <p class="lede">Containers share one disk. Each algorithm below orders the same queue of cylinder requests; the trace shows the read/write head travelling from the start position to every request. Less travel means less seek time.</p>
+      <form class="row" id="disk-form">
+        <label class="f">Request queue (cylinders)<input class="wide" id="q" value="98, 183, 37, 122, 14, 124, 65, 67"></label>
+        <label class="f">Head starts at<input class="num" id="head" type="number" min="0" value="53"></label>
+        <label class="f">Cylinders<input class="num" id="size" type="number" min="2" value="200"></label>
+        <div class="f" style="display:grid;gap:4px;font-size:13px;color:var(--muted)">Head moving
+          <div class="seg" role="group" aria-label="Head direction">
+            <button type="button" data-dir="up" aria-pressed="true">Up</button>
+            <button type="button" data-dir="down" aria-pressed="false">Down</button>
+          </div>
+        </div>
+        <button type="submit">Schedule</button>
+        <button type="button" class="quiet" id="rand">Random queue</button>
+      </form>
+      <div class="err" id="disk-err" role="alert"></div>
+      <div class="algos" id="algos" role="group" aria-label="Algorithms"></div>
+      <div class="trace-wrap">
+        <div class="trace-head"><span id="trace-title"></span><span id="trace-note"></span></div>
+        <svg class="trace" id="trace" role="img" aria-label="Head movement trace"></svg>
+        <p class="sequence" id="sequence"></p>
+      </div>
+    </section>
+
+    <!-- Virtual file system -->
+    <section id="fs" aria-labelledby="fs-h">
+      <h2 id="fs-h">Virtual disk</h2>
+      <p class="lede">64 blocks of 16 bytes. The bit table holds one bit per block: 0 is free, 1 is in use. Create files with each allocation method, then crash the disk halfway through a write and recover it from the journal.</p>
+      <div class="cols">
+        <div class="stack">
+          <div class="panel">
+            <h3>Blocks</h3>
+            <div class="blocks" id="blocks"></div>
+            <div class="legend"><span>Free</span><span class="l-used">File data</span><span class="l-index">Index block</span><span class="l-journal">Journal (reserved)</span></div>
+            <p class="bits" id="bits"></p>
+            <div class="stats" id="fs-stats"></div>
+          </div>
+          <div class="panel">
+            <h3>Directory</h3>
+            <div class="scroll"><table class="files"><thead><tr>
+              <th>Name</th><th>Method</th><th>Address</th><th>Length / max</th><th>Owner</th><th>Protection</th><th>Updated</th><th title="Disk reads needed to reach the file's last block">Reads to last block</th><th></th>
+            </tr></thead><tbody id="files"></tbody></table></div>
+          </div>
+        </div>
+        <div class="stack">
+          <div class="panel">
+            <h3>Create a file</h3>
+            <form class="row" id="fs-form">
+              <label class="f">Name<input id="fname" value="notes.txt" maxlength="24" style="width:130px"></label>
+              <label class="f">Method<select id="fmethod"><option value="indexed">Indexed</option><option value="linked">Linked</option><option value="contiguous">Contiguous</option></select></label>
+              <label class="f" style="flex-basis:100%">Contents<input id="fdata" value="Containers share one kernel." style="width:100%"></label>
+              <button type="submit">Create file</button>
+            </form>
+            <div class="err" id="fs-err" role="alert"></div>
+          </div>
+          <div class="panel">
+            <h3>Journal</h3>
+            <div class="row" style="margin-bottom:12px">
+              <button type="button" class="danger" id="crash">Crash mid-write</button>
+              <button type="button" id="recover">Recover from journal</button>
+              <button type="button" class="quiet" id="fs-reset">Reset disk</button>
+            </div>
+            <div class="result" id="fs-msg" role="status"></div>
+            <ul class="journal" id="journal" style="margin-top:12px"></ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Protection -->
+    <section id="protect" aria-labelledby="pr-h">
+      <h2 id="pr-h">Protection</h2>
+      <p class="lede">Rows are domains, columns are objects. Each cell lists what a process in that domain may do to that object. A star means the right can be passed on; switch and control act on other domains.</p>
+      <div class="cols">
+        <div class="stack">
+          <div class="panel scroll"><table class="matrix" id="matrix"></table></div>
+          <div class="panel">
+            <h3>Capabilities</h3>
+            <p class="empty-note" style="margin-bottom:10px">Tickets held by domains. Re-keying an object revokes every key-based ticket for it at once; deleting an indirection entry revokes only the tickets that point through it.</p>
+            <div class="scroll"><table><thead><tr><th>Ticket</th><th>Held by</th><th>Object</th><th>Rights</th><th>Revocation</th><th></th></tr></thead><tbody id="caps"></tbody></table></div>
+            <form class="row" id="cap-form" style="margin-top:14px">
+              <label class="f">Domain<select id="cap-d"></select></label>
+              <label class="f">Object<select id="cap-o"></select></label>
+              <label class="f">Right<select id="cap-r"><option>read</option><option>write</option><option>execute</option><option>print</option></select></label>
+              <label class="f">Scheme<select id="cap-s"><option value="key">Key</option><option value="indirection">Indirection</option></select></label>
+              <button type="submit" class="quiet">Issue ticket</button>
+            </form>
+          </div>
+        </div>
+        <div class="panel actions">
+          <form id="check-form">
+            <h3>Check an access</h3>
+            <div class="row">
+              <select id="ck-d" aria-label="Domain"></select>
+              <select id="ck-op" aria-label="Operation"><option>read</option><option>write</option><option>execute</option><option>print</option></select>
+              <select id="ck-o" aria-label="Object"></select>
+              <button type="submit">Check</button>
+            </div>
+          </form>
+          <form id="switch-form">
+            <h3>Switch domain</h3>
+            <div class="row">
+              <label class="f">From<select id="sw-from"></select></label>
+              <label class="f">To<select id="sw-to"></select></label>
+              <button type="submit">Switch</button>
+            </div>
+          </form>
+          <form id="copy-form">
+            <h3>Pass on a starred right</h3>
+            <div class="row">
+              <select id="cp-actor" aria-label="Giving domain"></select>
+              <select id="cp-right" aria-label="Right"><option>read</option><option>write</option><option>execute</option></select>
+              <select id="cp-obj" aria-label="Object"></select>
+              <select id="cp-target" aria-label="Receiving domain"></select>
+              <select id="cp-mode" aria-label="Mode"><option value="copy">Copy</option><option value="limited">Limited copy</option><option value="transfer">Transfer</option></select>
+              <button type="submit">Give</button>
+            </div>
+          </form>
+          <form id="revoke-form">
+            <h3>Revoke from an access list</h3>
+            <div class="row">
+              <select id="rv-d" aria-label="Domain"></select>
+              <select id="rv-r" aria-label="Right"><option>read</option><option>write</option><option>execute</option><option>print</option><option>switch</option><option>control</option><option>owner</option></select>
+              <select id="rv-o" aria-label="Object"></select>
+              <button type="submit" class="danger">Revoke</button>
+            </div>
+          </form>
+          <div class="result" id="pr-result" role="status"></div>
+          <div class="audit-box">
+            <h3>Audit log</h3>
+            <ul class="audit" id="audit"></ul>
+          </div>
+          <button type="button" class="quiet" id="pr-reset" style="justify-self:start">Reset policy</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Containers -->
+    <section id="containers" aria-labelledby="ct-h">
+      <h2 id="ct-h">Containers</h2>
+      <p class="lede" id="ct-lede">Guests run as ordinary processes on the shared kernel. The heartbeat monitor watches them and restarts any that crash, up to a restart budget.</p>
+      <div class="cols">
+        <div class="panel">
+          <div class="row" style="justify-content:space-between;margin-bottom:12px">
+            <h3 style="margin:0">Crash and restart</h3>
+            <button type="button" id="ha">Start two containers</button>
+          </div>
+          <p class="empty-note" id="ha-note">Starts “web”, which crashes after a quarter second, and “db”, which stays healthy. Takes about two seconds.</p>
+          <ul class="timeline" id="ha-events"></ul>
+        </div>
+        <div class="panel">
+          <div class="row" style="justify-content:space-between;margin-bottom:12px">
+            <h3 style="margin:0">User mode and supervisor mode</h3>
+            <button type="button" id="modes">Run</button>
+          </div>
+          <p class="empty-note" id="modes-note">A guest tries to set the hostname directly, which faults, then asks the kernel through a system call.</p>
+          <ul class="timeline" id="modes-events"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Threats -->
+    <section id="threats" aria-labelledby="th-h">
+      <h2 id="th-h">Threats</h2>
+      <p class="lede">The security monitor sorts violations into the five classic categories. Simulated attacks include denied reads and writes, a request flood, a CPU quota overrun, password guessing and a process lying about its domain.</p>
+      <div class="row" style="margin-bottom:18px">
+        <button type="button" id="threat-run">Simulate attacks</button>
+        <button type="button" class="quiet" id="cpu-run">Run a CPU spinner under a 1-second limit</button>
+      </div>
+      <div class="result" id="cpu-result" role="status" style="margin-bottom:18px"></div>
+      <div class="cats" id="cats"></div>
+      <div class="panel scroll"><table><thead><tr><th>Time</th><th>Severity</th><th>Category</th><th>Source</th><th>What happened</th></tr></thead>
+        <tbody id="threat-events"><tr><td colspan="5" class="empty-note">Simulate attacks to fill this log.</td></tr></tbody></table></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+async function api(path, body) {
+  const res = await fetch(path, body === undefined ? {} : {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({ error: "The server sent an unreadable response." }));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+async function busy(btn, fn) {
+  btn.disabled = true;
+  try { return await fn(); } finally { btn.disabled = false; }
+}
+
+/* ---------------- host ---------------- */
+api("/api/info").then((i) => {
+  $("#host").innerHTML = `Host: <b>${esc(i.system)}</b><br>Isolation: <b>${i.isolation === "namespace" ? "real Linux namespaces" : "user-space simulation"}</b><br>Version ${esc(i.version)}`;
+  if (i.isolation !== "namespace") $("#ct-lede").textContent += " This host isn't Linux with root, so guests run in the user-space simulation.";
+}).catch(() => { $("#host").textContent = "Can't reach the sandbox server. Is `sandbox web` still running?"; });
+
+/* ---------------- disk scheduling ---------------- */
+let disk = null, current = "SSTF", direction = "up";
+
+function parseQueue() {
+  return $("#q").value.split(/[\s,]+/).filter(Boolean).map(Number);
+}
+
+async function runDisk() {
+  $("#disk-err").textContent = "";
+  const requests = parseQueue();
+  if (!requests.length || requests.some((n) => !Number.isInteger(n))) {
+    $("#disk-err").textContent = "Enter the request queue as whole numbers separated by commas.";
+    return;
+  }
+  try {
+    disk = await api("/api/disk", { requests, head: +$("#head").value, size: +$("#size").value, direction });
+    renderAlgos(); drawTrace(true);
+  } catch (e) { $("#disk-err").textContent = e.message; }
+}
+
+function renderAlgos() {
+  const worst = Math.max(...disk.results.map((r) => r.total), 1);
+  const best = Math.min(...disk.results.map((r) => r.total));
+  $("#algos").innerHTML = disk.results.map((r) => `
+    <button type="button" class="algo" data-algo="${r.algorithm}" aria-pressed="${r.algorithm === current}">
+      <span class="name">${r.algorithm}</span>
+      <span><span class="total">${r.total}</span> <span class="unit">cylinders</span></span>
+      <span class="bar"><i style="width:${(100 * r.total) / worst}%"></i></span>
+      <span class="best">${r.total === best ? "Least travel" : ""}</span>
+    </button>`).join("");
+}
+
+$("#algos").addEventListener("click", (e) => {
+  const b = e.target.closest(".algo");
+  if (!b) return;
+  current = b.dataset.algo;
+  document.querySelectorAll(".algo").forEach((x) => x.setAttribute("aria-pressed", x === b));
+  drawTrace(true);
+});
+
+const DESCRIPTIONS = {
+  FCFS: "Serves requests in the order they arrived.",
+  SSTF: "Always moves to the nearest pending request.",
+  SCAN: "Sweeps to the end of the disk, then reverses.",
+  "C-SCAN": "Sweeps to the end, jumps back to the other end, sweeps the same way again.",
+  LOOK: "Like SCAN, but turns around at the last request instead of the disk edge.",
+  "C-LOOK": "Like C-SCAN, but jumps from the last request straight to the first one.",
+};
+
+function drawTrace(animate) {
+  const r = disk.results.find((x) => x.algorithm === current);
+  const svg = $("#trace");
+  const W = 900, pad = 34, rowH = 26;
+  const pts = [disk.head, ...r.path];
+  const H = pad + rowH * Math.max(pts.length - 1, 1) + 18;
+  const x = (c) => pad + ((W - 2 * pad) * c) / Math.max(disk.size - 1, 1);
+  const y = (i) => pad + i * rowH;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => Math.round(t * (disk.size - 1)));
+  let out = `<line class="axis" x1="${pad}" y1="${pad - 12}" x2="${W - pad}" y2="${pad - 12}"/>`;
+  out += ticks.map((t) => `<text class="tick" x="${x(t)}" y="${pad - 18}" text-anchor="middle">${t}</text>`).join("");
+  out += disk.requests.map((c) => `<line class="axis" x1="${x(c)}" y1="${pad - 15}" x2="${x(c)}" y2="${pad - 9}"/>`).join("");
+  let jumpIdx = -1;
+  if (r.return) for (let i = 1; i < pts.length; i++) if (Math.abs(pts[i] - pts[i - 1]) === r.return) { jumpIdx = i; break; }
+  const segs = [];
+  let d = `M${x(pts[0])},${y(0)}`;
+  for (let i = 1; i < pts.length; i++) {
+    if (i === jumpIdx) {
+      segs.push(`<path class="path" d="${d}"/>`);
+      segs.push(`<path class="jump" d="M${x(pts[i - 1])},${y(i - 1)} L${x(pts[i])},${y(i)}"/>`);
+      d = `M${x(pts[i])},${y(i)}`;
+    } else d += ` L${x(pts[i])},${y(i)}`;
+  }
+  segs.push(`<path class="path" d="${d}"/>`);
+  out += segs.join("");
+  const reqSet = new Set(disk.requests);
+  out += pts.map((c, i) => i === 0
+    ? `<circle class="start" cx="${x(c)}" cy="${y(0)}" r="5"/><text class="stop-label" x="${x(c) + 9}" y="${y(0) + 4}">start ${c}</text>`
+    : `<circle class="req" cx="${x(c)}" cy="${y(i)}" r="${reqSet.has(c) ? 4 : 3}"/><text class="tick" x="${x(c) + 8}" y="${y(i) + 4}">${c}</text>`).join("");
+  svg.innerHTML = out;
+  $("#trace-title").innerHTML = `<strong>${r.algorithm}</strong>&ensp;${esc(DESCRIPTIONS[r.algorithm])}`;
+  $("#trace-note").textContent = `${r.total} cylinders, ${r.average} per request` + (r.return ? `, including a ${r.return}-cylinder return jump (dashed)` : "");
+  $("#sequence").textContent = `Order: ${pts.join(" → ")}`;
+  if (animate && !reduceMotion) {
+    svg.querySelectorAll(".path").forEach((p) => {
+      const len = p.getTotalLength();
+      p.style.strokeDasharray = len; p.style.strokeDashoffset = len;
+      p.getBoundingClientRect();
+      p.style.transition = `stroke-dashoffset ${Math.min(1.6, 0.25 + len / 1400)}s ease-out`;
+      p.style.strokeDashoffset = 0;
+    });
+  }
+}
+
+$("#disk-form").addEventListener("submit", (e) => { e.preventDefault(); runDisk(); });
+document.querySelectorAll("[data-dir]").forEach((b) => b.addEventListener("click", () => {
+  direction = b.dataset.dir;
+  document.querySelectorAll("[data-dir]").forEach((x) => x.setAttribute("aria-pressed", x === b));
+  runDisk();
+}));
+$("#rand").addEventListener("click", () => {
+  const size = Math.max(2, +$("#size").value || 200);
+  $("#q").value = Array.from({ length: 10 }, () => Math.floor(Math.random() * size)).join(", ");
+  $("#head").value = Math.floor(Math.random() * size);
+  runDisk();
+});
+
+/* ---------------- virtual disk ---------------- */
+function renderFs(s) {
+  $("#blocks").innerHTML = s.blocks.map((b) => {
+    const label = b.kind === "journal" ? "J" : b.kind === "index" ? "I" : b.kind === "used" ? (b.file || "?")[0].toUpperCase() : "";
+    const title = `Block ${b.i}: ` + (b.kind === "free" ? "free" : b.kind === "journal" ? "reserved for the journal" : b.kind === "index" ? `index block of ${b.file}` : `data of ${b.file}`);
+    return `<div class="blk ${b.kind}" data-file="${esc(b.file || "")}" title="${esc(title)}">${label}</div>`;
+  }).join("");
+  $("#bits").innerHTML = "Bit table: " + s.bits.replace(/(.{16})/g, "$1 ").trim().replace(/1/g, "<b>1</b>");
+  const sm = s.summary;
+  $("#fs-stats").innerHTML = `<span><b>${sm.used}</b>blocks in use</span><span><b>${sm.free}</b>free</span><span><b>${sm.fragmentation}%</b>external fragmentation</span>`;
+  $("#files").innerHTML = s.files.length ? s.files.map((f) => `
+    <tr data-file="${esc(f.name)}">
+      <td><b>${esc(f.name)}</b><br><span class="empty-note">${esc(f.type)}</span></td>
+      <td>${f.method}</td>
+      <td class="mono">${f.address}${f.index_block !== null ? " (index)" : ""}</td>
+      <td class="mono">${f.current_length} / ${f.maximum_length} B</td>
+      <td>${esc(f.owner)}</td><td class="mono">${esc(f.protection)}</td><td class="mono">${f.updated}</td>
+      <td class="mono">${f.access_cost}</td>
+      <td><button type="button" class="quiet" data-del="${esc(f.name)}">Delete</button></td>
+    </tr>`).join("") : `<tr><td colspan="9" class="empty-note">No files visible. After a crash, recover from the journal to bring them back.</td></tr>`;
+  $("#journal").innerHTML = s.journal.map((r) => r.kind === "CHECKPOINT"
+    ? `<li class="cp"><span>—</span><span>checkpoint</span><span></span><span>metadata snapshot, log truncated</span></li>`
+    : `<li class="${r.uncommitted ? "bad" : ""}"><span>${r.txid}</span><span>${r.kind.toLowerCase()}</span><span>${esc(r.op)}</span><span>${esc(r.name)}${r.uncommitted ? " (never committed)" : ""}</span></li>`).join("");
+  const j = $("#journal"); j.scrollTop = j.scrollHeight;
+}
+
+function fsMsg(text, good) {
+  const m = $("#fs-msg");
+  m.className = "result " + (good ? "ok" : "no");
+  m.textContent = text;
+}
+
+$("#files").addEventListener("mouseover", (e) => {
+  const tr = e.target.closest("tr[data-file]");
+  document.querySelectorAll(".blk").forEach((b) => b.classList.toggle("hl", !!tr && b.dataset.file === tr.dataset.file));
+});
+$("#files").addEventListener("mouseleave", () => document.querySelectorAll(".blk.hl").forEach((b) => b.classList.remove("hl")));
+$("#files").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-del]");
+  if (!b) return;
+  try { renderFs(await api("/api/fs/delete", { name: b.dataset.del })); fsMsg(`Deleted ${b.dataset.del}; its blocks are free again.`, true); }
+  catch (err) { fsMsg(err.message, false); }
+});
+$("#fs-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("#fs-err").textContent = "";
+  const name = $("#fname").value.trim();
+  if (!name) { $("#fs-err").textContent = "Give the file a name."; return; }
+  try {
+    renderFs(await api("/api/fs/create", { name, data: $("#fdata").value, method: $("#fmethod").value }));
+    fsMsg(`Created ${name} with ${$("#fmethod").value} allocation.`, true);
+    $("#fname").value = "file" + Math.floor(Math.random() * 900 + 100) + ".txt";
+  } catch (err) { $("#fs-err").textContent = err.message; }
+});
+$("#crash").addEventListener("click", (e) => busy(e.target, async () => {
+  const s = await api("/api/fs/crash", {});
+  renderFs(s);
+  const msg = s.message ? s.message.charAt(0).toUpperCase() + s.message.slice(1) : "Power lost";
+  fsMsg(`${msg}. The directory and bit table are gone; only the journal survived.`, false);
+}));
+$("#recover").addEventListener("click", (e) => busy(e.target, async () => {
+  const s = await api("/api/fs/recover", {});
+  renderFs(s);
+  const r = s.recovery;
+  fsMsg(`Recovered ${s.files.length} files. Replayed ${r.replayed.length} committed transactions` +
+        (r.discarded.length ? ` and discarded unfinished transaction ${r.discarded.join(", ")}.` : "."), true);
+}));
+$("#fs-reset").addEventListener("click", async () => { renderFs(await api("/api/fs/reset", {})); $("#fs-msg").textContent = ""; });
+
+/* ---------------- protection ---------------- */
+function fillSelect(sel, items, pick) {
+  const prev = sel.value;
+  sel.innerHTML = items.map((i) => `<option>${esc(i)}</option>`).join("");
+  sel.value = items.includes(prev) ? prev : (pick ?? items[0]);
+}
+
+function renderProtection(s) {
+  const objs = s.objects.filter((o) => !s.domains.includes(o));
+  const head = `<thead><tr><th>Domain</th>${s.objects.map((o) => `<th>${esc(o)}</th>`).join("")}</tr></thead>`;
+  const body = s.domains.map((d) => `<tr><td>${esc(d)}</td>${s.objects.map((o) => {
+    const rights = s.cells[d][o];
+    return rights.length ? `<td>${rights.map((r) => `<span class="chip ${/switch|control|owner/.test(r) ? "sp" : ""}">${esc(r)}</span>`).join("")}</td>` : `<td class="empty">·</td>`;
+  }).join("")}</tr>`).join("");
+  $("#matrix").innerHTML = head + "<tbody>" + body + "</tbody>";
+  $("#caps").innerHTML = s.caps.map((c) => `<tr>
+      <td class="mono">#${c.id}</td><td>${esc(c.domain)}</td><td>${esc(c.obj)}</td>
+      <td>${c.rights.map((r) => `<span class="chip ${c.valid ? "" : "dead"}">${esc(r)}</span>`).join("")}</td>
+      <td>${c.scheme === "key" ? "key" : `indirection entry ${c.entry}`}${c.valid ? "" : ", <b style='color:var(--alarm)'>revoked</b>"}</td>
+      <td>${c.valid ? (c.scheme === "key"
+        ? `<button type="button" class="quiet" data-rekey="${esc(c.obj)}">Re-key ${esc(c.obj)}</button>`
+        : `<button type="button" class="quiet" data-entry="${c.entry}">Delete entry ${c.entry}</button>`) : ""}</td></tr>`).join("")
+    || `<tr><td colspan="6" class="empty-note">No tickets issued.</td></tr>`;
+  $("#audit").innerHTML = s.audit.slice().reverse().map((a) => `<li class="${/DENY/.test(a) ? "deny" : ""}">${esc(a)}</li>`).join("") || `<li>Checks and changes appear here.</li>`;
+  ["#ck-d", "#sw-from", "#cp-actor", "#rv-d", "#cap-d"].forEach((id) => fillSelect($(id), s.domains));
+  fillSelect($("#sw-to"), s.domains, "D2");
+  fillSelect($("#cp-target"), s.domains, "D1");
+  ["#ck-o", "#cp-obj", "#cap-o"].forEach((id) => fillSelect($(id), objs));
+  fillSelect($("#rv-o"), s.objects, "F3");
+  if (s.result) {
+    const r = $("#pr-result");
+    r.className = "result " + (s.result.allowed ? "ok" : "no");
+    r.textContent = s.result.text.charAt(0).toUpperCase() + s.result.text.slice(1);
+  }
+}
+
+async function protect(path, body) {
+  try { renderProtection(await api(path, body)); }
+  catch (e) { const r = $("#pr-result"); r.className = "result no"; r.textContent = e.message; }
+}
+
+let firstProtect = true;
+api("/api/protection").then((s) => {
+  renderProtection(s);
+  if (firstProtect) { $("#cp-actor").value = "D2"; $("#cp-obj").value = "F2"; $("#rv-d").value = "D4"; $("#sw-from").value = "D1"; firstProtect = false; }
+});
+$("#check-form").addEventListener("submit", (e) => { e.preventDefault(); protect("/api/protection/check", { domain: $("#ck-d").value, op: $("#ck-op").value, obj: $("#ck-o").value }); });
+$("#switch-form").addEventListener("submit", (e) => { e.preventDefault(); protect("/api/protection/switch", { from: $("#sw-from").value, to: $("#sw-to").value }); });
+$("#copy-form").addEventListener("submit", (e) => { e.preventDefault(); protect("/api/protection/copy", { actor: $("#cp-actor").value, right: $("#cp-right").value, obj: $("#cp-obj").value, target: $("#cp-target").value, mode: $("#cp-mode").value }); });
+$("#revoke-form").addEventListener("submit", (e) => { e.preventDefault(); protect("/api/protection/revoke", { domain: $("#rv-d").value, right: $("#rv-r").value, obj: $("#rv-o").value }); });
+$("#cap-form").addEventListener("submit", (e) => { e.preventDefault(); protect("/api/caps/issue", { domain: $("#cap-d").value, obj: $("#cap-o").value, right: $("#cap-r").value, scheme: $("#cap-s").value }); });
+$("#caps").addEventListener("click", (e) => {
+  const k = e.target.closest("[data-rekey]"), n = e.target.closest("[data-entry]");
+  if (k) protect("/api/caps/rekey", { obj: k.dataset.rekey });
+  if (n) protect("/api/caps/revoke-entry", { entry: +n.dataset.entry });
+});
+$("#pr-reset").addEventListener("click", () => { $("#pr-result").textContent = ""; $("#pr-result").className = "result"; protect("/api/protection/reset", {}); });
+
+/* ---------------- containers ---------------- */
+const KIND_LABEL = { start: "start", crash: "crash", restart: "restart", "gave-up": "gave up", exit: "exit" };
+$("#ha").addEventListener("click", (e) => busy(e.target, async () => {
+  $("#ha-note").textContent = "Running… the monitor checks both containers every 0.1 seconds.";
+  $("#ha-events").innerHTML = "";
+  try {
+    const r = await api("/api/containers/ha", {});
+    $("#ha-events").innerHTML = r.events.map((ev) => `<li><time>${ev.time}</time><span class="tag ${ev.kind}">${KIND_LABEL[ev.kind] || ev.kind}</span><span><b>${esc(ev.container)}</b> ${esc(ev.detail)}</span></li>`).join("");
+    $("#ha-note").textContent = r.containers.map((c) => `${c.name}: ${c.state}, restarted ${c.restarts} time${c.restarts === 1 ? "" : "s"}`).join(". ") + ".";
+  } catch (err) { $("#ha-note").textContent = err.message; }
+}));
+$("#modes").addEventListener("click", (e) => busy(e.target, async () => {
+  const r = await api("/api/containers/modes", {});
+  $("#modes-events").innerHTML = r.steps.map((s, i) => `<li><time>step ${i + 1}</time><span class="tag ${s.fault ? "fault" : s.mode}">${s.fault ? "fault" : s.mode}</span><span>${esc(s.text)}</span></li>`).join("");
+  $("#modes-note").textContent = "The guest ends back in user mode; the fault was recorded.";
+}));
+
+/* ---------------- threats ---------------- */
+const CAT_SHORT = {
+  "breach of confidentiality": "Confidentiality", "breach of integrity": "Integrity",
+  "breach of availability": "Availability", "theft of service": "Theft of service",
+  "masquerading (breach of authentication)": "Masquerading",
+};
+function renderCats(summary) {
+  $("#cats").innerHTML = Object.entries(CAT_SHORT).map(([k, label]) => {
+    const n = summary ? summary[k] : 0;
+    return `<div class="cat ${n ? "hot" : ""}"><b>${n}</b><span>${label}</span></div>`;
+  }).join("");
+}
+renderCats(null);
+$("#threat-run").addEventListener("click", (e) => busy(e.target, async () => {
+  const r = await api("/api/security/threats", {});
+  renderCats(r.summary);
+  $("#threat-events").innerHTML = r.events.map((ev) => `<tr><td class="mono">${ev.time}</td><td><span class="tag ${ev.severity}">${ev.severity}</span></td><td>${esc(CAT_SHORT[ev.category] || ev.category)}</td><td class="mono">${esc(ev.subject)}</td><td>${esc(ev.detail)}</td></tr>`).join("");
+}));
+$("#cpu-run").addEventListener("click", (e) => busy(e.target, async () => {
+  const out = $("#cpu-result");
+  out.className = "result"; out.style.borderColor = "var(--line)"; out.textContent = "Running an infinite loop with a 1-second CPU limit…";
+  const r = await api("/api/security/cpu-limit", {});
+  out.style.borderColor = "";
+  out.className = "result " + (r.killed ? "ok" : "no");
+  out.textContent = r.killed
+    ? `The kernel stopped the spinner with ${r.signal} after ${r.elapsed} s. A runaway guest can't hog the CPU.`
+    : `The spinner was not stopped (ended with ${r.signal || "a normal exit"}).`;
+}));
+
+/* ---------------- nav highlight & start ---------------- */
+const links = [...document.querySelectorAll("nav.side a")];
+const obs = new IntersectionObserver((entries) => entries.forEach((en) => {
+  if (en.isIntersecting) links.forEach((l) => l.classList.toggle("on", l.getAttribute("href") === "#" + en.target.id));
+}), { rootMargin: "-40% 0px -55% 0px" });
+document.querySelectorAll("main section").forEach((s) => obs.observe(s));
+
+runDisk();
+api("/api/fs").then(renderFs);
+</script>
+</body>
+</html>

@@ -492,6 +492,12 @@ def cmd_disk(args) -> int:
     return 0
 
 
+def cmd_web(args) -> int:
+    from .web import serve
+    serve(args.host, args.port, open_browser=args.open)
+    return 0
+
+
 # --------------------------------------------------------------------------- #
 # Guided demo
 # --------------------------------------------------------------------------- #
@@ -688,6 +694,12 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--seed", type=int, default=7)
     d.add_argument("--trace", metavar="ALGO", help=f"plot head path for one of {ALGORITHMS} or ALL")
     d.set_defaults(func=cmd_disk)
+
+    w = sub.add_parser("web", help="browser dashboard on localhost")
+    w.add_argument("--host", default="127.0.0.1")
+    w.add_argument("--port", type=int, default=8000)
+    w.add_argument("--open", action="store_true", help="open the dashboard in your browser")
+    w.set_defaults(func=cmd_web)
     return p
 
 
